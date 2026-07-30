@@ -2,6 +2,8 @@ import os,requests
 from datetime import datetime,timedelta,timezone
 import json
 
+print("SENDKEY =", repr(os.getenv("SENDKEY")))
+
 cfg=json.load(open("config.json",encoding="utf-8"))
 SENDKEY=os.environ["SENDKEY"]
 cn=timezone(timedelta(hours=8))
