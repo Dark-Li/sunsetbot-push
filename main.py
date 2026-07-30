@@ -17,4 +17,21 @@ for city in cfg["cities"]:
             d=requests.get("https://sunsetbot.top/",params={"intend":"select_city","query_city":city,"event":event,"model":model},timeout=30).json()
             img="https://sunsetbot.top"+d["img_href"]
             msg+=f"### {model}\n- 火烧云：{d['tb_quality']}\n- 时间：{d['tb_event_time']}\n- AOD：{d['tb_aod']}\n\n![]({img})\n"
-requests.post(f"https://sctapi.ftqq.com/{SENDKEY}.send",data={"title":"🌇 SunsetBot 每日预报","desp":msg})
+url = f"https://sctapi.ftqq.com/{SENDKEY}.send"
+
+print(url)
+
+r = requests.post(
+    url,
+    data={
+        "title": "🌇 SunsetBot 每日预报",
+        "desp": msg
+    },
+    timeout=30
+)
+
+print("HTTP:", r.status_code)
+print("Response:")
+print(r.text)
+
+r.raise_for_status()
