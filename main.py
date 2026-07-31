@@ -17,6 +17,25 @@ def format_time(time_str):
     return parts[1] if len(parts) > 1 else time_str
 
 
+def fix_img_url(img_href):
+    """修复 SunsetBot 图片路径问题
+    接口返回: /image/cross_section/...
+    真实路径: https://sunsetbot.top/static/media/cross_section/...
+    """
+    if not img_href:
+        return ""
+
+    # 将 /image/ 替换为 /static/media/
+    fixed_path = img_href.replace("/image/", "/static/media/")
+
+    if not fixed_path.startswith("http"):
+        if not fixed_path.startswith("/"):
+            fixed_path = "/" + fixed_path
+        return f"https://sunsetbot.top{fixed_path}"
+
+    return fixed_path
+
+
 def main():
     # 1. 检查环境变量
     sendkey = os.getenv("SENDKEY")
@@ -44,9 +63,8 @@ def main():
     models = ["GFS", "EC"]
     msg_parts = []
 
-    # 4. 请求 API 并构建无表格、兼容黑夜模式的 Markdown
+    # 4. 请求 API 并构建排版
     with requests.Session() as session:
-        # 设置常见浏览器 User-Agent，防止图片/数据请求被拦截
         session.headers.update(
             {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -59,7 +77,17 @@ def main():
 
             for title, event in events:
                 icon = get_event_icon(title)
-                msg_parts.append(f"## {icon} {title}\n\n")
+                msg_parts.append(f"### {icon} {title}\n\n")
+
+                # 生成简洁且黑夜模式友好的表格
+                msg_parts.append(
+                    "| 模型 | 火烧云质量指数 | 发生时间 | AOD | 起报时次 |\n"
+                )
+                msg_parts.append(
+                    "| :---: | :---: | :---: | :---: | :---: |\n"
+                )
+
+                images = []
 
                 for model in models:
                     try:
@@ -76,7 +104,7 @@ def main():
                         res.raise_for_status()
                         d = res.json()
 
-                        # 格式化火烧云指数
+                        # 1. 格式化质量指数
                         raw_quality = d.get("tb_quality", "未知")
                         quality_match = re.match(
                             r"^([0-9.]+)(.*)$", raw_quality
@@ -87,24 +115,18 @@ def main():
                         else:
                             quality_display = f"**{raw_quality}**"
 
+                        # 2. 格式化普通字段（使用纯文本，不加反引号）
                         tb_time = format_time(d.get("tb_event_time", "未知"))
                         tb_aod = d.get("tb_aod", "未知")
-                        times_name = d.get("display_times_name", "未知")
+                        times_name = d.get("display_times_name", "-")
 
-                        # 图片 URL 拼接与处理
-                        img_path = d.get("img_href", "")
-                        if img_path.startswith("/"):
-                            img_url = f"https://sunsetbot.top{img_path}"
-                        else:
-                            img_url = img_path
+                        # 3. 获取并修正图片真实 URL
+                        img_url = fix_img_url(d.get("img_href", ""))
+                        images.append((model, img_url))
 
-                        # 列表卡片式排版：完美兼容亮色/暗色模式，无白底硬块
+                        # 4. 填充表格行
                         msg_parts.append(
-                            f"### 🔹 {model} 模型 ({times_name})\n"
-                            f"- **火烧云质量**：{quality_display}\n"
-                            f"- **时间**：**{tb_time}** ｜ **AOD**：{tb_aod}\n"
-                            f"- **剖面图预报**：\n"
-                            f"  ![{city}-{model}]({img_url})\n\n"
+                            f"| **{model}** | {quality_display} | {tb_time} | {tb_aod} | {times_name} |\n"
                         )
 
                     except Exception as err:
@@ -112,8 +134,18 @@ def main():
                             f"⚠️ Warning: 获取 {city} [{title} - {model}] 数据失败: {err}"
                         )
                         msg_parts.append(
-                            f"### 🔹 {model} 模型\n- ❌ *获取数据失败*\n\n"
+                            f"| **{model}** | ❌ 失败 | - | - | - |\n"
                         )
+
+                msg_parts.append("\n")
+
+                # 5. 拼接渲染正确的图片
+                if images:
+                    for model_name, img_link in images:
+                        if img_link:
+                            msg_parts.append(
+                                f"**{model_name} 预报图：**\n\n![{model_name}]({img_link})\n\n"
+                            )
 
             if c_idx < len(cities) - 1:
                 msg_parts.append("---\n\n")
